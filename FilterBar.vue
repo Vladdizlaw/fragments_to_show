@@ -9,28 +9,26 @@ const props = defineProps({
         type: Object, default: {}
     }
 })
-const addfilters = ref(null)//Кнопка добавить фильтры
 const state = reactive({
     currentFilters: [
         { title: 'Дата начала', subtitle: ['Начало', 'Окончание'], type: 'datePicker', fieldName: 'start_date' },
         { title: 'Город', type: 'checkbox', fieldName: 'city_id', data: [] },
         { title: 'Куратор', type: 'checkbox', fieldName: 'created_id', data: [] },
         { title: 'Заказчик', type: 'checkbox', fieldName: 'customer_id', data: [] },
-        {title: 'Статус у тайника', type: 'checkbox', fieldName: 'progress', data: [
+        {
+            title: 'Статус у тайника', type: 'checkbox', fieldName: 'progress', data: [
                 { id: 1, name: 'Приступил к проверке (физ.)' },
                 { id: 2, name: 'Закончил проверку(физ.)' },
                 { id: 3, name: 'Заполнил отчёт' },
                 { id: 4, name: 'Проверка успешно выполнена' },
                 { id: 5, name: 'Проверка аннулирована' },
                 { id: 6, name: 'Отправлена заявка' },
-                { id: 7, name: 'Назначен на проверку'},
-                { id: 8, name: 'Проверка оплачена' },               
+                { id: 7, name: 'Назначен на проверку' },
+                { id: 8, name: 'Проверка оплачена' },
             ]
         },
     ],
-    bufferChosenFilters: { currentFilters: [], allowedFilters: [], selectedFilters: { ...props.selectedFilters } },
-    showCurrentFilters: true,
-    showAllowedFilters: true,
+    bufferChosenFilters: { currentFilters: [], allowedFilters: [], selectedFilters: { ...props.selectedFilters } },  
     allowedFilters: [
         { title: 'Тип проверки', type: 'checkbox', fieldName: 'type', data: [{ id: 'visit', name: 'Визит' }, { id: 'complex', name: 'Комплекс' }, { id: 'call', name: 'Звонок' }] },
         { title: 'Чек-листы', type: 'checkbox', fieldName: 'checklist_id', data: [] },
@@ -43,23 +41,34 @@ const state = reactive({
         { title: 'Дата истечения', subtitle: ['Начало ', 'Окончание'], type: 'datePicker', fieldName: 'expiration_date' }
     ],
     searchFilters: '',
-    city_id: [],
-    customer_id: [],
-    created_id: [],
-    checklist_id: [],
-    entity_id: [],
-    instruction_id: [],
+    loadingFilterData: false,
+    showCurrentFilters: true,
+    showAllowedFilters: true,
 
 })
-function handlePopupFilter(fieldName) {
+const addfilters = ref(null)//Кнопка добавить фильтры
+const loadedFiltersData = { //Объект для загрузки данных в фильтры  которые требуют загрузки
+    city_id: getCitiesWithAuditsOnly,
+    customer_id: getCustomers,
+    created_id: getCreators,
+    checklist_id: getChecklists,
+    entity_id: getEntities,
+    instruction_id: getInstructions
+}
+
+async function handlePopupFilter(fieldName) {
+    if (Object.keys(loadedFiltersData).includes(fieldName)) {
+        state.loadingFilterData = true
+        const filter = state.currentFilters.find(el => el.fieldName == fieldName)
+        filter.data = await loadedFiltersData[fieldName]()
+        state.loadingFilterData = false
+    }
     if (props.selectedFilters[fieldName]) {
         state.bufferChosenFilters.selectedFilters[fieldName] = [...props.selectedFilters[fieldName]]
     } else {
         state.bufferChosenFilters.selectedFilters[fieldName] = []
     }
     state.searchFilters = ''
-
-
 }
 async function getCitiesWithAuditsOnly() {
     try {
@@ -167,8 +176,8 @@ function applyChosenFilters(close) {
 watch(props.selectedFilters, (value) => {
     emit('update:selectedFilters', value)
 })
-function showPeriodFiltersFill(filter,value){
-   //Отображение титла кнопки с периодами когда период выбран
+function showPeriodFiltersFill(filter, value) {
+    //Отображение титла кнопки с периодами когда период выбран
     return `${filter.title}: От ${value[0].split('.')[0]}.${value[0].split('.')[1]} До ${value[1].split('.')[0]}.${value[1].split('.')[1]}`
 }
 function showedFilters(filter) {
@@ -184,7 +193,7 @@ function showedFilters(filter) {
         }
     })
 }
-const showedCurrentFilters = computed(() => { 
+const showedCurrentFilters = computed(() => {
     return state.bufferChosenFilters.currentFilters.filter(el => {
         if (el.title) {
             return el['title'].toLowerCase().includes(state.searchFilters?.toLowerCase())
@@ -199,49 +208,26 @@ const showedAllowedFilters = computed(() => {
     })
 })
 
-
 onBeforeUpdate(() => {
     sessionStorage.setItem('current_filters', JSON.stringify(state.currentFilters))
     sessionStorage.setItem('allowed_filters', JSON.stringify(state.allowedFilters))
-
-
-
 })
 onBeforeMount(() => {
     if (sessionStorage.getItem('current_filters') !== null && sessionStorage.getItem('allowed_filters') !== null) {
         state.currentFilters = JSON.parse(sessionStorage.getItem('current_filters'))
         state.allowedFilters = JSON.parse(sessionStorage.getItem('allowed_filters'))
     }
-
-
 })
 onMounted(async () => {
-    const loadedFiltersName = ['city_id', 'customer_id', 'created_id', 'checklist_id', 'entity_id', 'instruction_id']
-    state.city_id = await getCitiesWithAuditsOnly()
-    state.customer_id = await getCustomers()
-    state.created_id = await getCreators()
-    state.checklist_id = await getChecklists()
-    state.entity_id = await getEntities()
-    state.instruction_id = await getInstructions()
-    state.currentFilters.forEach(el => {
-        if (loadedFiltersName.includes(el.fieldName)) {
-            el.data = state[el.fieldName]//Запись в data filters
-        }
-    })
     const transferFilters = []
     state.allowedFilters.forEach((el) => {
-        if (loadedFiltersName.includes(el.fieldName)) {
-            el.data = state[el.fieldName]//Запись в data allowedFilters
-        }
         if (props.selectedFilters[el.fieldName]?.length > 0) {
-            //Перенос из  allowedFilter в filters
+            //Перенос из  allowedFilter в currentfilters если есть значение
             transferFilters.push(el)
             state.currentFilters.push(el)
         }
     })
     state.allowedFilters = state.allowedFilters.filter(el => !transferFilters.includes(el))
-
-
 })
 </script>
 <template>
@@ -252,18 +238,21 @@ onMounted(async () => {
                 v-slot="{close,open}">
                 <PopoverButton @click="handlePopupFilter(filter.fieldName,close)"
                     class="bg-[#F1F6FF] rounded-md px-3 py-1 text-sm  ">
-                    <div v-if="filter.type=='checkbox'||(!props.selectedFilters||!(props?.selectedFilters[filter?.fieldName]&&props?.selectedFilters[filter?.fieldName].length))" class="flex items-center gap-3 justify-center relative whitespace-nowrap" >
-                    {{filter.title}} <svg class="mt-1 transition-transform" :class="{'rotate-180':open}" width="12"
-                        height="12" viewBox="0 0 24 13" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M22 1.99999L12 10.2609L2 1.99999" stroke="#A2A8B3" stroke-width="3"
-                            stroke-linecap="round" />
-                    </svg></div>
-                    <div v-if="filter.type=='datePicker'&&props.selectedFilters[filter.fieldName]&&props.selectedFilters[filter.fieldName].length>0" class="flex items-center gap-3 justify-center relative whitespace-nowrap" >
-                    {{showPeriodFiltersFill(filter,props.selectedFilters[filter.fieldName])}} <svg class="mt-1 transition-transform" :class="{'rotate-180':open}" width="12"
-                        height="12" viewBox="0 0 24 13" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M22 1.99999L12 10.2609L2 1.99999" stroke="#A2A8B3" stroke-width="3"
-                            stroke-linecap="round" />
-                    </svg></div>
+                    <div v-if="filter.type=='checkbox'||(!props.selectedFilters||!(props?.selectedFilters[filter?.fieldName]&&props?.selectedFilters[filter?.fieldName].length))"
+                        class="flex items-center gap-3 justify-center relative whitespace-nowrap">
+                        {{filter.title}} <svg class="mt-1 transition-transform" :class="{'rotate-180':open}" width="12"
+                            height="12" viewBox="0 0 24 13" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M22 1.99999L12 10.2609L2 1.99999" stroke="#A2A8B3" stroke-width="3"
+                                stroke-linecap="round" />
+                        </svg></div>
+                    <div v-if="filter.type=='datePicker'&&props.selectedFilters[filter.fieldName]&&props.selectedFilters[filter.fieldName].length>0"
+                        class="flex items-center gap-3 justify-center relative whitespace-nowrap">
+                        {{showPeriodFiltersFill(filter,props.selectedFilters[filter.fieldName])}} <svg
+                            class="mt-1 transition-transform" :class="{'rotate-180':open}" width="12" height="12"
+                            viewBox="0 0 24 13" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M22 1.99999L12 10.2609L2 1.99999" stroke="#A2A8B3" stroke-width="3"
+                                stroke-linecap="round" />
+                        </svg></div>
                     <div v-if="filter.type=='checkbox'&&props.selectedFilters[filter.fieldName]&&props.selectedFilters[filter.fieldName].length > 0"
                         class="absolute top-[-5px] right-0 w-3 h-3 rounded-full bg-red-500 text-white text-xs flex justify-center items-center ">
                         {{props.selectedFilters[filter.fieldName].length}}</div>
@@ -294,9 +283,9 @@ onMounted(async () => {
                     <div class=" w-full px-2  opacity-100 z-[10]" v-if="filter.type=='checkbox'">
                         <el-input v-model="state.searchFilters" placeholder="Поиск" clearable />
                     </div>
-                    <div class="h-full overflow-y-auto overflow-x-hidden  dialog pl-4 mr-2 mt-1">
-                        <el-checkbox-group 
-                            v-if="filter.type=='checkbox'"
+                    <div class="h-full overflow-y-auto overflow-x-hidden  dialog pl-4 mr-2 mt-1"
+                        v-loading="state.loadingFilterData">
+                        <el-checkbox-group v-if="filter.type=='checkbox'"
                             v-model="state.bufferChosenFilters.selectedFilters[filter.fieldName]"
                             class="flex flex-wrap w-full " size="large">
                             <el-checkbox size="large" v-for="(item, i) in showedFilters(filter)" :key="i"
@@ -307,6 +296,7 @@ onMounted(async () => {
                             </el-checkbox>
                         </el-checkbox-group>
                     </div>
+
                     <div class="w-full z-[100] px-2 pb-2 pt-1">
                         <button @click="applyChosenFilter(close,filter.fieldName)"
                             class="w-full bg-[#FF272B] rounded-md flex items-center justify-center">
